@@ -1,0 +1,5 @@
+Tools for manipulating DNS-323 firmware
+---------------------------------------
+
+unpack <firmware>
+   Unpack the kernel, ramdisk and defaults tarball from a firmware file.
