@@ -66,7 +66,7 @@ def extract_header(ifile):
         i = open(ifile, 'rb')
         header = struct.unpack('I' * 9, i.read(36)) 
         header += (i.read(12), )
-        header += struct.unpack('b' * 12, i.read(12))
+        header += struct.unpack('B' * 12, i.read(12))
         header += struct.unpack('I', i.read(4))
         i.close()
         return header
