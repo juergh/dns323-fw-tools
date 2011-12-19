@@ -1,0 +1,142 @@
+#!/usr/bin/python
+
+import os
+import struct
+import sys
+
+def calc_checksum(ifile):
+    """
+    Calculate the XOR checksum of a file.
+    """
+    checksum = 0
+    i = open(ifile, 'rb')
+    while True:
+        try:
+            data = i.read(4)
+            checksum ^= struct.unpack('I', data)[0]
+        except:
+            break
+    i.close()
+    return checksum
+
+def create_header(kernel_offset, kernel_size, kernel_checksum,
+                  ramdisk_offset, ramdisk_size, ramdisk_checksum,
+                  defaults_offset, defaults_size, defaults_checksum):
+    """
+    Create firmware header.
+    typedef struct _CONTROL_HEADER_
+    {
+       u32 offset_1;
+       u32 len_1;
+       u32 offset_2;
+       u32 len_2;
+       u32 offset_3;
+       u32 len_3;
+       u32 checksum_1;
+       u32 checksum_2;
+       u32 checksum_3;
+       u8 magic_num[12];
+       u8 product_id;
+       u8 custom_id;
+       u8 model_id;
+       u8 sub_id;
+       u8 NewVersion;
+       u8 reserved[7];       //all structure is 64 bytes
+       u32 Next_offset;
+    }*CONTROL_HEADER_ID, CONTROL_HEADER; // 64 bytes
+    """
+    header = (kernel_offset,
+              kernel_size,
+              ramdisk_offset,
+              ramdisk_size,
+              defaults_offset,
+              defaults_size,
+              kernel_checksum,
+              ramdisk_checksum,
+              defaults_checksum,
+              'U\xaaFrodoII\x00U\xaa',
+              7,
+              1,
+              1,
+              1,
+              4,
+              0, 0, 0, 0, 0, 0, 0,
+              0)
+    return header
+
+
+def main():
+    """
+    Main entry point.
+    """
+    kernel = sys.argv[1]   # uImage
+    ramdisk = sys.argv[2]   # uRamdisk
+    defaults = sys.argv[3]   # default.tar.gz
+    firmware = sys.argv[4]
+
+    kernel_offset = 64
+    kernel_size = os.path.getsize(kernel)
+    kernel_checksum = calc_checksum(kernel)
+
+    ramdisk_offset = kernel_offset + kernel_size
+    ramdisk_size = os.path.getsize(ramdisk)
+    ramdisk_checksum = calc_checksum(ramdisk)
+
+    defaults_offset = ramdisk_offset + ramdisk_size
+    defaults_size = os.path.getsize(defaults)
+    defaults_checksum = calc_checksum(defaults)
+
+    header = create_header(kernel_offset, kernel_size, kernel_checksum,
+                           ramdisk_offset, ramdisk_size, ramdisk_checksum,
+                           defaults_offset, defaults_size, defaults_checksum)
+
+    print """
+Kernel offset:     %d
+Kernel size:       %d
+Ramdisk offset:    %d
+Ramdisk size:      %d
+Defaults offset:   %d
+Defaults size:     %d
+Kernel checksum:   %08x
+Ramdisk checksum:  %08x
+Defaults checksum: %08x
+Magic number:      %s
+Product id:        %d
+Custom id:         %d
+Model id:          %d
+Sub id:            %d
+New version:       %d
+Reserved:          %02x%02x%02x%02x%02x%02x%02x
+Next offset:       %08x
+""" % header
+
+    fw = open(firmware, 'wb')
+
+    # Write the header
+    fw.write(struct.pack('I' * 9, *header[0:9]))
+    fw.write(header[9])
+    fw.write(struct.pack('B' * 12, *header[10:22]))
+    fw.write(struct.pack('I', header[22]))
+
+    # Write the kernel
+    i = open(kernel, 'rb')
+    fw.seek(kernel_offset)
+    fw.write(i.read(kernel_size))
+    i.close()
+
+    # Write the ramdisk
+    i = open(ramdisk, 'rb')
+    fw.seek(ramdisk_offset)
+    fw.write(i.read(ramdisk_size))
+    i.close()
+
+    # Write the defaults
+    i = open(defaults, 'rb')
+    fw.seek(defaults_offset)
+    fw.write(i.read(defaults_size))
+    i.close()
+
+    fw.close()
+
+if __name__ == '__main__':
+    main()
