@@ -1,0 +1,66 @@
+#!/bin/bash
+
+function fatal()
+{
+    echo "Error: $*"
+    exit
+}
+
+dir=$1
+fw=$2
+pwd=$(pushd $(dirname $BASH_SOURCE) > /dev/null; pwd; popd > /dev/null)
+
+# Check commandline options
+if [ -z "$dir" -o -z "$fw" ] ; then
+    echo "Usage: fw-pack <firmware directory> <output file>"
+    exit
+fi
+
+# Check the user
+if [ $(whoami) != 'root' ] ; then
+    echo "You need to be root to run this script"
+    exit
+fi
+
+test -d $dir || fatal "$dir does not exist"
+
+cd $dir
+
+# Mount the ramdisk
+mount | grep -q ramdisk_el || mount ramdisk_el ramdisk_el.d -o loop || \
+    fatal "Failed to mount ramdisk_el"
+
+# Create image.cfs and copy it to the ramdisk
+mksquashfs=$pwd/squashfs-3.3-lzma/squashfs3.3/squashfs-tools/mksquashfs
+if [ ! -e $mksquashfs ] ; then
+    make -C $pwd/squashfs-3.3-lzma || fatal "Failed to make the squashfs tools"
+fi
+$mksquashfs image.d image.cfs -all-root -noappend || \
+    fatal "Failed to squash image.d"
+cp image.cfs ramdisk_el.d || fatal "Failed to copy image.cfs"
+
+# Remake the ramdisk (results in better compression)
+tar cf ramdisk_el.tar ramdisk_el.d && umount ramdisk_el.d || \
+    fatal "Failed to create ramdisk_el.tar"
+size=$(ls -l ramdisk_el | awk '{ print $5 }') || \
+    fatal "Failed to determine size of ramdisk_el"
+dd if=/dev/zero of=ramdisk_el bs=$size count=1 && mke2fs -F ramdisk_el || \
+    fatal "Failed to create filesystem on ramdisk_el"
+mount ramdisk_el ramdisk_el.d -o loop && tar xf ramdisk_el.tar || \
+    fatal "Failed to copy files to ramdisk_el.d"
+
+# Create ramdisk_el.gz
+sync
+umount ramdisk_el || fatal "Failed to unmount ramdisk_el"
+gzip --stdout ramdisk_el > ramdisk_el.gz || \
+    Fatal "failed to create ramdisk_el.gz"
+
+# Create uRamdisk
+mkimage -A ARM -O Linux -T RAMDisk -C gzip -a 800000 -e 800000 -n Ramdisk \
+    -d ramdisk_el.gz uRamdisk || fatal "Failed to create uRamdisk"
+
+# Create default.tar.gz
+tar czf default.tar.gz default || fatal "Failed to create default.tar.gz"
+
+# Create firmware
+$pwd/pack uImage uRamdisk default.tar.gz ../$fw

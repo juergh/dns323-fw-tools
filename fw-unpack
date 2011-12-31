@@ -1,0 +1,54 @@
+#!/bin/bash
+
+function fatal()
+{
+    echo "Error: $*"
+    exit
+}
+
+fw=$1
+dir=$2
+pwd=$(pushd $(dirname $BASH_SOURCE) > /dev/null; pwd; popd > /dev/null)
+
+# Check the commandline options
+if [ -z "$fw" ] ; then
+    echo "Usage: fw-unpack <firmware file> [output directory]"
+    exit
+fi
+
+# Check the user
+if [ $(whoami) != 'root' ] ; then
+    echo "You need to be root to run this script"
+    exit
+fi
+
+# Check/set the output directory
+if [ -z "$dir" ] ; then
+    dir=$(basename $fw).d
+fi
+
+test -e $fw || fatal "$fw does not exist"
+test -d $dir && fatal "$dir already exists"
+
+mkdir $dir
+cd $dir
+
+# Unpack the firmware
+$pwd/unpack ../$fw || fatal "Failed to unpack $fw"
+
+# Unzip the ramdisk and loop mount it
+mkdir ramdisk_el.d && \
+    gunzip --stdout ramdisk_el.gz > ramdisk_el && \
+    mount ramdisk_el ramdisk_el.d -o loop || \
+    fatal "Failed to unzip/mount ramdisk_el.gz"
+
+# Untar the default.tar.gz file
+tar xzf default.tar.gz || fatal "Failed to untar default.tar.gz"
+
+# Unsquash the image.cfs file from the ramdisk
+unsquashfs=$pwd/squashfs-3.3-lzma/squashfs3.3/squashfs-tools/unsquashfs
+if [ ! -e $unsquashfs ] ; then
+    make -C $pwd/squashfs-3.3-lzma || fatal "Failed to make the squashfs tools"
+fi
+cp ramdisk_el.d/image.cfs . || fatal "Failed to copy image.cfs"
+$unsquashfs -d image.d image.cfs || fatal "Failed to unsquash image.cfs"

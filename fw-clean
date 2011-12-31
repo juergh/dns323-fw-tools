@@ -1,0 +1,27 @@
+#!/bin/bash
+
+function fatal()
+{
+    echo "Error: $*"
+    exit
+}
+
+dir=$1
+
+# Check the commandline options
+if [ -z "$dir" ] ; then
+    echo "Usage: fw-clean <firmware directory>"
+    exit
+fi
+
+# Check the user
+if [ $(whoami) != 'root' ] ; then
+    echo "You need to be root to run this script"
+    exit
+fi
+
+if [ -d $dir ] ; then
+    sync
+    umount $dir/ramdisk_el.d 2> /dev/null
+    rm -rf $dir || fatal "Failed to remove $dir"
+fi

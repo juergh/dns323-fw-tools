@@ -6,3 +6,12 @@ unpack <firmware>
 
 pack <uImage> <uRamdisk> <default.tar.gz> <firmware>
    Pack a kernel, ramdisk and defaults tarball into a firmware file.
+
+fw-unpack <firmware file> [output directory]
+   Unpack a firmware file and put all the files into the output directory.
+
+fw-pack <firmware directory> <output file>
+   Pack a firmware directory tree into a firmware file.
+
+fw-clean <firmware directory>
+   Clean a firmware directory.
