@@ -3,7 +3,7 @@
 function fatal()
 {
     echo "Error: $*"
-    exit
+    exit 1
 }
 
 dir=$1
@@ -11,13 +11,12 @@ dir=$1
 # Check the commandline options
 if [ -z "$dir" ] ; then
     echo "Usage: fw-clean <firmware directory>"
-    exit
+    exit 2
 fi
 
 # Check the user
 if [ $(whoami) != 'root' ] ; then
-    echo "You need to be root to run this script"
-    exit
+    fatal "You need to be root to run this script"
 fi
 
 if [ -d $dir ] ; then
